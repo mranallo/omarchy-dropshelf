@@ -3,7 +3,7 @@
   "id": "io.github.mranallo.dropshelf",
   "name": "Dropshelf",
   "version": "0.1.0",
-  "author": "Michael Ranallo",
+  "author": "Mark Ranallo",
   "license": "MIT",
   "description": "A persistent floating shelf for dragging files between applications",
   "kinds": ["panel", "bar-widget"],
