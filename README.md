@@ -1,8 +1,10 @@
-# Omarchy Dropshelf
+# Drop Shelf
 
 A persistent floating shelf for Omarchy. Drop files or images onto it, then drag them into any application that accepts file drops.
 
-Dropshelf stores file URI references only. It never moves, copies, or deletes the original files.
+Drop Shelf stores file URI references only. It never moves, copies, or deletes the original files. Browser images are downloaded into a private local data directory so they can be dragged out as normal file drops.
+
+![Drop Shelf](preview.png)
 
 ## Install
 
@@ -10,16 +12,31 @@ Dropshelf stores file URI references only. It never moves, copies, or deletes th
 omarchy plugin add https://github.com/mranallo/omarchy-dropshelf.git --enable
 ```
 
-The Dropshelf icon is added to the right side of the Omarchy bar. Click it to open the shelf beneath the icon. The shelf follows the icon when it is moved between the left, center, or right bar sections.
+The Drop Shelf icon is added to the right side of the Omarchy bar. Click it to open the shelf beneath the icon. The shelf follows the icon when it is moved between the left, center, or right bar sections.
 
 ## Use
 
 1. Click the shelf icon in the Omarchy bar.
-2. Drag local files or images onto the window.
-3. Drag a shelf item into another application.
+2. Drag local files onto the window — or drag images straight from the browser, including Google Images results and Giphy.
+3. Drag a shelf item into another application. The item is removed from the shelf after the drag; press **Undo** to restore it if the drop didn't land.
 4. Remove an individual reference with its `x` button, or use **Clear**.
 
-The shelf contents are stored at `$XDG_STATE_HOME/omarchy-dropshelf/shelf.json`, or `~/.local/state/omarchy-dropshelf/shelf.json` when `XDG_STATE_HOME` is unset. Browser images are downloaded into `$XDG_DATA_HOME/omarchy-dropshelf`, or `~/.local/share/omarchy-dropshelf`.
+Removing an item never touches the original file.
+
+## Configuration
+
+Drop Shelf needs no configuration. Its data lives at:
+
+- Shelf contents: `$XDG_STATE_HOME/omarchy-dropshelf/shelf.json` (default `~/.local/state/omarchy-dropshelf/shelf.json`)
+- Downloaded browser images: `$XDG_DATA_HOME/omarchy-dropshelf` (default `~/.local/share/omarchy-dropshelf`)
+
+## Remove
+
+```bash
+omarchy plugin remove io.github.mranallo.dropshelf
+```
+
+Optionally delete the state and data directories listed above.
 
 ## Development
 
