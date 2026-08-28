@@ -31,7 +31,7 @@ The shelf can be toggled from the command line, so you can bind it to a key. In 
 o.bind("SUPER + D", "Drop Shelf", "omarchy shell shell toggle io.github.mranallo.dropshelf '{}'")
 ```
 
-When opened this way the shelf anchors near the top-left of the screen instead of under the bar icon.
+When opened this way the shelf reuses the position from the last time it was opened via the bar icon (falling back to the top-left corner if the icon has never been clicked).
 
 ## Configuration
 

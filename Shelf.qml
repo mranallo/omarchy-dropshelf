@@ -37,6 +37,7 @@ Item {
       : Quickshell.env("HOME") + "/.local/state/omarchy-dropshelf";
   }
   readonly property string statePath: root.stateDir + "/shelf.json"
+  readonly property string anchorPath: root.stateDir + "/anchor.json"
   readonly property string dataDir: {
     const configured = Quickshell.env("XDG_DATA_HOME");
     return configured && configured.length > 0
@@ -53,17 +54,31 @@ Item {
     if (payloadJson) {
       try {
         const payload = JSON.parse(String(payloadJson));
-        anchorScreen = String(payload.screen || "");
-        anchorX = Number(payload.x) || 0;
-        anchorY = Number(payload.y) || 0;
-        anchorWidth = Number(payload.width) || 0;
-        anchorHeight = Number(payload.height) || 0;
-        barWidth = Number(payload.barWidth) || 0;
-        barHeight = Number(payload.barHeight) || 0;
-        barPosition = String(payload.barPosition || "top");
+        // A summon without bar geometry (e.g. a keybinding's empty payload)
+        // reuses the last remembered anchor instead of resetting it.
+        if (payload && payload.screen && Number(payload.width) > 0) {
+          applyAnchor(payload);
+          saveAnchor(payload);
+        }
       } catch (error) { }
     }
     shelfWindow.visible = true;
+  }
+
+  function applyAnchor(payload) {
+    anchorScreen = String(payload.screen || "");
+    anchorX = Number(payload.x) || 0;
+    anchorY = Number(payload.y) || 0;
+    anchorWidth = Number(payload.width) || 0;
+    anchorHeight = Number(payload.height) || 0;
+    barWidth = Number(payload.barWidth) || 0;
+    barHeight = Number(payload.barHeight) || 0;
+    barPosition = String(payload.barPosition || "top");
+  }
+
+  function saveAnchor(payload) {
+    anchorWriter.command = ["bash", "-c", "umask 077; mkdir -p -- \"$1\" && printf '%s' \"$2\" > \"$3\"", "dropshelf", stateDir, JSON.stringify(payload), anchorPath];
+    anchorWriter.running = true;
   }
 
   function close() {
@@ -243,6 +258,25 @@ Item {
     onFileChanged: reload()
     onLoaded: root.loadState(text())
     onLoadFailed: root.loadState("")
+  }
+
+  FileView {
+    id: anchorFile
+    path: root.anchorPath
+    onLoaded: {
+      try {
+        const payload = JSON.parse(String(text()));
+        // Only seed from disk if no bar click has anchored the shelf yet.
+        if (root.anchorScreen === "" && payload && payload.screen)
+          root.applyAnchor(payload);
+      } catch (error) { }
+    }
+    onLoadFailed: { }
+  }
+
+  Process {
+    id: anchorWriter
+    running: false
   }
 
   Process {
