@@ -18,6 +18,9 @@ const added = context.addUrls(parsed, ["file:///tmp/one%20file.png", "file:///tm
 assert(added.length === 2, "addUrls de-duplicates entries");
 assert(context.removeAt(added, 0)[0].name === "two.txt", "removeAt removes the selected entry");
 assert(context.localUrls(["file:///tmp/a", "https://example.test/b"]).length === 1, "localUrls rejects remote URLs");
+assert(context.remoteImageUrl(["https://example.test/photo.png"], "", "") === "https://example.test/photo.png", "remoteImageUrl reads URI drops");
+assert(context.remoteImageUrl([], "", '<img src="https://example.test/photo.webp">') === "https://example.test/photo.webp", "remoteImageUrl reads browser HTML drops");
+assert(context.remoteImageUrl([], "not a URL", "") === "", "remoteImageUrl rejects arbitrary text");
 assert(context.isImage("photo.WEBP"), "isImage recognizes supported extensions");
 assert(!context.isImage("notes.txt"), "isImage rejects non-images");
 assert(JSON.parse(context.serialize(added)).version === 1, "serialize emits versioned state");

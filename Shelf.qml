@@ -31,6 +31,12 @@ Item {
       : Quickshell.env("HOME") + "/.local/state/omarchy-dropshelf";
   }
   readonly property string statePath: root.stateDir + "/shelf.json"
+  readonly property string dataDir: {
+    const configured = Quickshell.env("XDG_DATA_HOME");
+    return configured && configured.length > 0
+      ? configured + "/omarchy-dropshelf"
+      : Quickshell.env("HOME") + "/.local/share/omarchy-dropshelf";
+  }
   readonly property color mutedForeground: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.62)
   readonly property color subtleSurface: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
   readonly property color hairline: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.18)
@@ -74,15 +80,33 @@ Item {
 
   function addDrop(drop) {
     const urls = Model.localUrls(drop.urls || []);
-    if (urls.length === 0) {
-      statusText = "Only local files are supported";
+    if (urls.length > 0) {
+      const next = Model.addUrls(entries, urls);
+      const added = next.length - entries.length;
+      entries = next;
+      statusText = added > 0 ? "Added " + added + (added === 1 ? " item" : " items") : "Already on the shelf";
+      persist();
       return;
     }
-    const next = Model.addUrls(entries, urls);
-    const added = next.length - entries.length;
-    entries = next;
-    statusText = added > 0 ? "Added " + added + (added === 1 ? " item" : " items") : "Already on the shelf";
-    persist();
+
+    const remote = Model.remoteImageUrl(drop.urls || [], drop.hasText ? drop.text : "", drop.hasHtml ? drop.html : "");
+    if (remote !== "") {
+      downloadImage(remote);
+      return;
+    }
+    statusText = "Drop a local file or browser image";
+  }
+
+  function downloadImage(url) {
+    if (downloader.running) {
+      statusText = "Please wait for the current image";
+      return;
+    }
+    statusText = "Saving image…";
+    downloader.command = ["bash", "-c",
+      "set -e; umask 077; mkdir -p -- \"$1\"; out=$(mktemp --tmpdir=\"$1\" dropshelf-XXXXXX); trap 'rm -f -- \"$out\"' EXIT; curl -fL --max-time 30 --max-filesize 52428800 --proto '=http,https' -o \"$out\" -- \"$2\"; mime=$(file -Lb --mime-type \"$out\"); case \"$mime\" in image/*) ;; *) exit 65 ;; esac; ext=$(printf '%s' \"${mime#image/}\" | tr -cd 'a-zA-Z0-9'); final=\"${out}.${ext:-img}\"; mv -- \"$out\" \"$final\"; trap - EXIT; printf '%s' \"$final\"",
+      "dropshelf", dataDir, url];
+    downloader.running = true;
   }
 
   function removeAt(index) {
@@ -119,6 +143,27 @@ Item {
         stateFile.reload();
       else
         root.statusText = "Could not save shelf";
+    }
+  }
+
+  Process {
+    id: downloader
+    running: false
+    stdout: StdioCollector {
+      id: downloadOutput
+      waitForEnd: true
+    }
+    onExited: function(exitCode) {
+      const path = String(downloadOutput.text || "").trim();
+      if (exitCode !== 0 || path === "") {
+        root.statusText = "Could not save that image";
+        return;
+      }
+      const uri = "file://" + encodeURI(path);
+      const next = Model.addUrls(root.entries, [uri]);
+      root.entries = next;
+      root.statusText = "Image added";
+      root.persist();
     }
   }
 
@@ -174,7 +219,6 @@ Item {
         id: windowDropArea
         anchors.fill: parent
         anchors.margins: Math.max(Border.top(root.popupBorder), Border.right(root.popupBorder), Border.bottom(root.popupBorder), Border.left(root.popupBorder))
-        keys: ["text/uri-list"]
         onDropped: function(drop) {
           drop.acceptProposedAction();
           root.addDrop(drop);
@@ -280,7 +324,7 @@ Item {
 
               Text {
                 width: parent.width
-                text: "Files stay in their original locations. Drag them from here into Slack or another application."
+                text: "Local files stay in their original locations. Browser images are saved privately so they can be dragged into another application."
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
                 textFormat: Text.PlainText

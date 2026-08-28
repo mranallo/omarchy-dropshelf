@@ -34,6 +34,26 @@ function localUrls(urls) {
   return result;
 }
 
+function remoteImageUrl(urls, text, html) {
+  const candidates = [];
+  for (let i = 0; i < (urls || []).length; i++)
+    candidates.push(String(urls[i]));
+  if (text)
+    candidates.push(String(text).trim());
+  if (html) {
+    const match = String(html).match(/<img\b[^>]*\bsrc=["']([^"']+)["']/i);
+    if (match)
+      candidates.push(match[1]);
+  }
+
+  for (let j = 0; j < candidates.length; j++) {
+    const candidate = candidates[j];
+    if (/^https?:\/\/[^\s]+$/i.test(candidate))
+      return candidate;
+  }
+  return "";
+}
+
 function addUrls(entries, urls) {
   const result = (entries || []).slice();
   const seen = {};

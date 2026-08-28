@@ -1,6 +1,6 @@
 # Omarchy Dropshelf
 
-A persistent floating shelf for Omarchy. Drop files or images onto it, then drag them into Slack, a browser, or any application that accepts file drops.
+A persistent floating shelf for Omarchy. Drop files or images onto it, then drag them into any application that accepts file drops.
 
 Dropshelf stores file URI references only. It never moves, copies, or deletes the original files.
 
@@ -16,10 +16,10 @@ The Dropshelf icon is added to the right side of the Omarchy bar. Click it to op
 
 1. Click the shelf icon in the Omarchy bar.
 2. Drag local files or images onto the window.
-3. Drag a shelf item into Slack or another application.
+3. Drag a shelf item into another application.
 4. Remove an individual reference with its `x` button, or use **Clear**.
 
-The shelf contents are stored at `$XDG_STATE_HOME/omarchy-dropshelf/shelf.json`, or `~/.local/state/omarchy-dropshelf/shelf.json` when `XDG_STATE_HOME` is unset.
+The shelf contents are stored at `$XDG_STATE_HOME/omarchy-dropshelf/shelf.json`, or `~/.local/state/omarchy-dropshelf/shelf.json` when `XDG_STATE_HOME` is unset. Browser images are downloaded into `$XDG_DATA_HOME/omarchy-dropshelf`, or `~/.local/share/omarchy-dropshelf`.
 
 ## Development
 
