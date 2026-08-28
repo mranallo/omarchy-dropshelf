@@ -162,6 +162,12 @@ Item {
     persist();
   }
 
+  function removeUri(uri) {
+    entries = Model.removeUri(entries, uri);
+    statusText = entries.length === 0 ? "Drop files here" : entries.length + (entries.length === 1 ? " item" : " items");
+    persist();
+  }
+
   function clearShelf() {
     entries = [];
     statusText = "Shelf cleared";
@@ -475,6 +481,7 @@ Item {
                   }
 
                   Rectangle {
+                    id: removeButton
                     width: Style.space(22)
                     height: width
                     radius: width / 2
@@ -482,6 +489,7 @@ Item {
                     anchors.right: parent.right
                     anchors.margins: Style.space(5)
                     visible: tileMouse.containsMouse && !tile.Drag.active
+                    z: 2
                     color: Qt.rgba(Color.background.r, Color.background.g, Color.background.b, 0.88)
                     border.width: Style.spacing.hairline
                     border.color: root.hairline
@@ -495,6 +503,7 @@ Item {
 
                     MouseArea {
                       anchors.fill: parent
+                      z: 3
                       cursorShape: Qt.PointingHandCursor
                       onClicked: root.removeAt(tile.index)
                     }
@@ -508,13 +517,19 @@ Item {
                 Drag.imageSource: tile.imageFile ? tile.uri : ""
                 Drag.hotSpot.x: width / 2
                 Drag.hotSpot.y: height / 2
+                Drag.onDragFinished: function(dropAction) {
+                  if (dropAction !== Qt.IgnoreAction)
+                    root.removeUri(tile.uri);
+                }
 
                 MouseArea {
                   id: tileMouse
                   anchors.fill: parent
+                  z: 1
                   hoverEnabled: true
                   cursorShape: Qt.OpenHandCursor
                   drag.target: tile
+                  preventStealing: true
                   onPressed: tile.Drag.active = true
                   onReleased: {
                     tile.Drag.drop();

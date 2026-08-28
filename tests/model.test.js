@@ -17,6 +17,7 @@ assert(parsed[0].name === "one file.png", "displayName decodes URI components");
 const added = context.addUrls(parsed, ["file:///tmp/one%20file.png", "file:///tmp/two.txt"]);
 assert(added.length === 2, "addUrls de-duplicates entries");
 assert(context.removeAt(added, 0)[0].name === "two.txt", "removeAt removes the selected entry");
+assert(context.removeUri(added, "file:///tmp/two.txt").length === 1, "removeUri removes the dragged entry by stable URI");
 assert(context.localUrls(["file:///tmp/a", "https://example.test/b"]).length === 1, "localUrls rejects remote URLs");
 assert(context.remoteImageUrl(["https://example.test/photo.png"], "", "") === "https://example.test/photo.png", "remoteImageUrl reads URI drops");
 assert(context.remoteImageUrl([], "", '<img src="https://example.test/photo.webp">') === "https://example.test/photo.webp", "remoteImageUrl reads browser HTML drops");

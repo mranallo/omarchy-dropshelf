@@ -102,6 +102,10 @@ function removeAt(entries, index) {
   return result;
 }
 
+function removeUri(entries, uri) {
+  return (entries || []).filter(function(item) { return item.uri !== uri; });
+}
+
 function displayName(uri) {
   const parts = String(uri).split("/");
   const encoded = parts.length > 0 ? parts[parts.length - 1] : "File";
