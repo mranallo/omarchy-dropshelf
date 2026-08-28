@@ -58,11 +58,21 @@ function remoteImageUrl(urls, text, html, nativeUrl) {
 }
 
 function extractGoogleImageUrl(value) {
-  let candidate = String(value || "").trim();
+  let candidate = String(value || "").trim()
+    .replace(/&amp;/g, "&")
+    .replace(/\\u003d/g, "=")
+    .replace(/\\u0026/g, "&")
+    .replace(/\\u002f/gi, "/");
   if (!candidate) return "";
 
-  const prefixed = candidate.match(/https?:\/\/[^\s\r\n]+/i);
-  if (prefixed) candidate = prefixed[0];
+  const googleParam = candidate.match(/(?:imgurl|mediaurl)(?:=|%3D)(https?(?:%25?3A|:)(?:%25?2F|\/){2}[^&\s"']+)/i);
+  if (googleParam) {
+    try { return decodeURIComponent(decodeURIComponent(googleParam[1])); }
+    catch (error) { return googleParam[1]; }
+  }
+
+  const prefixed = candidate.match(/https?:\/\/[^\s\r\n"']+/i);
+  if (prefixed) candidate = prefixed[0].replace(/[),.;]+$/, "");
 
   const lines = candidate.split(/[\r\n]+/);
   for (let i = 0; i < lines.length; i++) {
@@ -74,7 +84,8 @@ function extractGoogleImageUrl(value) {
   }
 
   try {
-    const decoded = decodeURIComponent(candidate);
+    let decoded = candidate;
+    for (let i = 0; i < 2; i++) decoded = decodeURIComponent(decoded);
     const match = decoded.match(/[?&](?:imgurl|mediaurl)=([^&]+)/i);
     if (match) return decodeURIComponent(match[1]);
   } catch (error) { }
