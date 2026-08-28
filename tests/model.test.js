@@ -21,6 +21,8 @@ assert(context.localUrls(["file:///tmp/a", "https://example.test/b"]).length ===
 assert(context.remoteImageUrl(["https://example.test/photo.png"], "", "") === "https://example.test/photo.png", "remoteImageUrl reads URI drops");
 assert(context.remoteImageUrl([], "", '<img src="https://example.test/photo.webp">') === "https://example.test/photo.webp", "remoteImageUrl reads browser HTML drops");
 assert(context.remoteImageUrl([], "", "", "https://example.test/native.gif\n") === "https://example.test/native.gif", "remoteImageUrl reads native browser URL formats");
+assert(context.remoteImageUrl(["https://www.google.com/imgres?imgurl=https%3A%2F%2Fexample.test%2Ffull.jpg&imgrefurl=https%3A%2F%2Fexample.test"], "", "") === "https://example.test/full.jpg", "remoteImageUrl extracts Google image result URLs");
+assert(context.remoteImageUrl([], "https://www.google.com/url?mediaurl=https%253A%252F%252Fexample.test%252Fphoto.png&x=1", "") === "https://example.test/photo.png", "remoteImageUrl extracts encoded Google media URLs");
 assert(context.remoteImageUrl([], "not a URL", "") === "", "remoteImageUrl rejects arbitrary text");
 assert(context.isImage("photo.WEBP"), "isImage recognizes supported extensions");
 assert(!context.isImage("notes.txt"), "isImage rejects non-images");

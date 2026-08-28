@@ -100,7 +100,7 @@ Item {
       "application/x-moz-url",
       "text/x-moz-url",
       "DownloadURL"
-    ]);
+    ]) || anyTextMime(drop);
     const remote = Model.remoteImageUrl(drop.urls || [], drop.hasText ? drop.text : "", drop.hasHtml ? drop.html : "", nativeUrl);
     if (remote !== "") {
       downloadImage(remote);
@@ -121,6 +121,18 @@ Item {
       if ((drop.formats || []).indexOf(formats[i]) === -1) continue;
       const value = String(drop.getDataAsString(formats[i]) || "").trim();
       if (value !== "") return value;
+    }
+    return "";
+  }
+
+  function anyTextMime(drop) {
+    const formats = drop.formats || [];
+    for (let i = 0; i < formats.length; i++) {
+      const format = String(formats[i]);
+      if (!/^text\//i.test(format) && format.toLowerCase().indexOf("url") === -1) continue;
+      const value = String(drop.getDataAsString(format) || "").trim();
+      if (value.indexOf("http://") !== -1 || value.indexOf("https://") !== -1)
+        return value;
     }
     return "";
   }

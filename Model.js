@@ -51,11 +51,34 @@ function remoteImageUrl(urls, text, html, nativeUrl) {
     candidates.push(String(nativeUrl).trim().split(/[\r\n]/)[0]);
 
   for (let j = 0; j < candidates.length; j++) {
-    const candidate = candidates[j];
-    if (/^https?:\/\/[^\s]+$/i.test(candidate))
-      return candidate;
+    const candidate = extractGoogleImageUrl(candidates[j]);
+    if (/^https?:\/\/[^\s]+$/i.test(candidate)) return candidate;
   }
   return "";
+}
+
+function extractGoogleImageUrl(value) {
+  let candidate = String(value || "").trim();
+  if (!candidate) return "";
+
+  const prefixed = candidate.match(/https?:\/\/[^\s\r\n]+/i);
+  if (prefixed) candidate = prefixed[0];
+
+  const lines = candidate.split(/[\r\n]+/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (/^https?:\/\//i.test(line)) {
+      candidate = line;
+      break;
+    }
+  }
+
+  try {
+    const decoded = decodeURIComponent(candidate);
+    const match = decoded.match(/[?&](?:imgurl|mediaurl)=([^&]+)/i);
+    if (match) return decodeURIComponent(match[1]);
+  } catch (error) { }
+  return candidate;
 }
 
 function addUrls(entries, urls) {
