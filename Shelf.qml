@@ -34,6 +34,7 @@ Item {
   readonly property color mutedForeground: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.62)
   readonly property color subtleSurface: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
   readonly property color hairline: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.18)
+  readonly property var popupBorder: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
 
   function open(payloadJson) {
     closingFromHost = false;
@@ -162,92 +163,100 @@ Item {
         root.shell.hide(root.pluginId);
     }
 
-    DropArea {
-      id: windowDropArea
+    BorderSurface {
       anchors.fill: parent
-      keys: ["text/uri-list"]
-      onDropped: function(drop) {
-        drop.acceptProposedAction();
-        root.addDrop(drop);
-      }
+      color: Color.popups.background
+      borderSpec: root.popupBorder
+      radius: Style.cornerRadius
+      clip: true
 
-      Rectangle {
+      DropArea {
+        id: windowDropArea
         anchors.fill: parent
-        anchors.margins: Style.space(10)
-        radius: Style.cornerRadius
-        color: windowDropArea.containsDrag ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.14) : "transparent"
-        border.width: windowDropArea.containsDrag ? Style.space(2) : 0
-        border.color: Color.accent
+        anchors.margins: Math.max(Border.top(root.popupBorder), Border.right(root.popupBorder), Border.bottom(root.popupBorder), Border.left(root.popupBorder))
+        keys: ["text/uri-list"]
+        onDropped: function(drop) {
+          drop.acceptProposedAction();
+          root.addDrop(drop);
+        }
 
-        Column {
+        Rectangle {
           anchors.fill: parent
-          anchors.margins: Style.space(16)
-          spacing: Style.space(12)
+          anchors.margins: Style.space(8)
+          radius: Math.max(0, Style.cornerRadius - Style.space(2))
+          color: windowDropArea.containsDrag ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.14) : "transparent"
+          border.width: windowDropArea.containsDrag ? Style.space(2) : 0
+          border.color: Color.accent
 
-          Item {
-            width: parent.width
-            implicitHeight: Math.max(titleColumn.implicitHeight, clearButton.implicitHeight)
+          Column {
+            anchors.fill: parent
+            anchors.margins: Style.space(16)
+            spacing: Style.space(12)
 
-            Column {
-              id: titleColumn
-              anchors.left: parent.left
-              anchors.right: clearButton.left
-              anchors.rightMargin: Style.space(12)
-              spacing: Style.space(2)
+            Item {
+              width: parent.width
+              implicitHeight: Math.max(titleColumn.implicitHeight, clearButton.implicitHeight)
 
-              Text {
-                width: parent.width
-                text: "Dropshelf"
-                textFormat: Text.PlainText
-                font.family: Style.font.family
-                font.pixelSize: Style.font.title
-                font.weight: Font.DemiBold
-                color: Color.foreground
-                elide: Text.ElideRight
+              Column {
+                id: titleColumn
+                anchors.left: parent.left
+                anchors.right: clearButton.left
+                anchors.rightMargin: Style.space(12)
+                spacing: Style.space(2)
+
+                Text {
+                  width: parent.width
+                  text: "Dropshelf"
+                  textFormat: Text.PlainText
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.title
+                  font.weight: Font.DemiBold
+                  color: Color.foreground
+                  elide: Text.ElideRight
+                }
+
+                Text {
+                  width: parent.width
+                  text: root.statusText
+                  textFormat: Text.PlainText
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  color: root.mutedForeground
+                  elide: Text.ElideRight
+                }
               }
 
-              Text {
-                width: parent.width
-                text: root.statusText
-                textFormat: Text.PlainText
-                font.family: Style.font.family
-                font.pixelSize: Style.font.bodySmall
-                color: root.mutedForeground
-                elide: Text.ElideRight
+              Button {
+                id: clearButton
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.entries.length > 0
+                text: "Clear"
+                fontSize: Style.font.bodySmall
+                foreground: Color.foreground
+                fontFamily: Style.font.family
+                horizontalPadding: Style.spacing.controlPaddingX
+                verticalPadding: Style.spacing.controlPaddingY
+                bordered: true
+                onClicked: root.clearShelf()
               }
             }
 
-            Button {
-              id: clearButton
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              visible: root.entries.length > 0
-              text: "Clear"
-              fontSize: Style.font.bodySmall
-              foreground: Color.foreground
-              fontFamily: Style.font.family
-              horizontalPadding: Style.spacing.controlPaddingX
-              verticalPadding: Style.spacing.controlPaddingY
-              bordered: true
-              onClicked: root.clearShelf()
+            Rectangle {
+              width: parent.width
+              height: Style.spacing.hairline
+              color: root.hairline
             }
-          }
 
-          Rectangle {
-            width: parent.width
-            height: Style.spacing.hairline
-            color: root.hairline
-          }
+            Item {
+              width: parent.width
+              height: parent.height - y
 
-          Item {
-            width: parent.width
-            height: parent.height - y
-
-            Column {
-              anchors.centerIn: parent
-              width: Math.min(parent.width, Style.space(260))
-              spacing: Style.space(10)
-              visible: root.entries.length === 0
+              Column {
+                anchors.centerIn: parent
+                width: Math.min(parent.width, Style.space(260))
+                spacing: Style.space(10)
+                visible: root.entries.length === 0
 
               Text {
                 width: parent.width
@@ -281,7 +290,7 @@ Item {
               }
             }
 
-            GridView {
+              GridView {
               id: shelfGrid
               anchors.fill: parent
               visible: root.entries.length > 0
@@ -405,6 +414,7 @@ Item {
                     tile.y = 0;
                   }
                 }
+              }
               }
             }
           }

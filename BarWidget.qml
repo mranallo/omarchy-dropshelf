@@ -9,11 +9,14 @@ BarWidget {
   readonly property bool opened: root.bar && root.bar.shell
     ? root.bar.shell.isPluginOpen("io.github.mranallo.dropshelf")
     : false
+  property int openAttempts: 0
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
   function payload() {
-    var anchorWindow = button.QsWindow.window;
+    var anchorWindow = root.bar && typeof root.bar.targetWindow === "function"
+      ? root.bar.targetWindow(button)
+      : null;
     if (!anchorWindow || !anchorWindow.screen)
       return "{}";
     var point = anchorWindow.contentItem.mapFromItem(button, 0, 0);
@@ -30,8 +33,15 @@ BarWidget {
   }
 
   function open() {
-    if (root.bar && root.bar.shell)
-      root.bar.shell.summon("io.github.mranallo.dropshelf", root.payload());
+    if (!root.bar || !root.bar.shell) return;
+    var data = root.payload();
+    if (data === "{}") {
+      if (root.openAttempts++ < 3)
+        Qt.callLater(root.open);
+      return;
+    }
+    root.openAttempts = 0;
+    root.bar.shell.summon("io.github.mranallo.dropshelf", data);
   }
 
   function close() {
