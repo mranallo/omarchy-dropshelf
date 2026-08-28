@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.mranallo.dropshelf",
+  "name": "Dropshelf",
+  "version": "0.1.0",
+  "author": "Michael Ranallo",
+  "license": "MIT",
+  "description": "A persistent floating shelf for dragging files between applications",
+  "kinds": ["panel", "bar-widget"],
+  "entryPoints": {
+    "panel": "Shelf.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "keepLoaded": true,
+  "barWidget": {
+    "displayName": "Dropshelf",
+    "description": "Hold files temporarily and drag them into other applications",
+    "category": "Utilities",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
