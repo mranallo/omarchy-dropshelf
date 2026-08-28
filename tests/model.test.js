@@ -20,6 +20,7 @@ assert(context.removeAt(added, 0)[0].name === "two.txt", "removeAt removes the s
 assert(context.localUrls(["file:///tmp/a", "https://example.test/b"]).length === 1, "localUrls rejects remote URLs");
 assert(context.remoteImageUrl(["https://example.test/photo.png"], "", "") === "https://example.test/photo.png", "remoteImageUrl reads URI drops");
 assert(context.remoteImageUrl([], "", '<img src="https://example.test/photo.webp">') === "https://example.test/photo.webp", "remoteImageUrl reads browser HTML drops");
+assert(context.remoteImageUrl([], "", "", "https://example.test/native.gif\n") === "https://example.test/native.gif", "remoteImageUrl reads native browser URL formats");
 assert(context.remoteImageUrl([], "not a URL", "") === "", "remoteImageUrl rejects arbitrary text");
 assert(context.isImage("photo.WEBP"), "isImage recognizes supported extensions");
 assert(!context.isImage("notes.txt"), "isImage rejects non-images");

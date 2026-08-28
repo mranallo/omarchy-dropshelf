@@ -34,17 +34,21 @@ function localUrls(urls) {
   return result;
 }
 
-function remoteImageUrl(urls, text, html) {
+function remoteImageUrl(urls, text, html, nativeUrl) {
   const candidates = [];
   for (let i = 0; i < (urls || []).length; i++)
     candidates.push(String(urls[i]));
   if (text)
     candidates.push(String(text).trim());
   if (html) {
-    const match = String(html).match(/<img\b[^>]*\bsrc=["']([^"']+)["']/i);
-    if (match)
-      candidates.push(match[1]);
+    const source = String(html);
+    const match = source.match(/<img\b[^>]*\bsrc=["']([^"']+)["']/i);
+    if (match) candidates.push(match[1]);
+    const sourceSet = source.match(/<img\b[^>]*\bsrcset=["']([^"']+)["']/i);
+    if (sourceSet) candidates.push(sourceSet[1].split(/[\s,]+/)[0]);
   }
+  if (nativeUrl)
+    candidates.push(String(nativeUrl).trim().split(/[\r\n]/)[0]);
 
   for (let j = 0; j < candidates.length; j++) {
     const candidate = candidates[j];

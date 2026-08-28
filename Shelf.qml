@@ -89,12 +89,47 @@ Item {
       return;
     }
 
-    const remote = Model.remoteImageUrl(drop.urls || [], drop.hasText ? drop.text : "", drop.hasHtml ? drop.html : "");
+    const imageFormat = imageMimeFormat(drop.formats || []);
+    if (imageFormat !== "") {
+      saveImageData(imageFormat, drop.getDataAsArrayBuffer(imageFormat));
+      return;
+    }
+
+    const nativeUrl = firstMimeText(drop, [
+      "application/x-moz-file-promise-url",
+      "application/x-moz-url",
+      "text/x-moz-url",
+      "DownloadURL"
+    ]);
+    const remote = Model.remoteImageUrl(drop.urls || [], drop.hasText ? drop.text : "", drop.hasHtml ? drop.html : "", nativeUrl);
     if (remote !== "") {
       downloadImage(remote);
       return;
     }
     statusText = "Drop a local file or browser image";
+  }
+
+  function imageMimeFormat(formats) {
+    const preferred = ["image/gif", "image/webp", "image/png", "image/jpeg", "image/avif", "image/bmp"];
+    for (let i = 0; i < preferred.length; i++)
+      if (formats.indexOf(preferred[i]) !== -1) return preferred[i];
+    return "";
+  }
+
+  function firstMimeText(drop, formats) {
+    for (let i = 0; i < formats.length; i++) {
+      if ((drop.formats || []).indexOf(formats[i]) === -1) continue;
+      const value = String(drop.getDataAsString(formats[i]) || "").trim();
+      if (value !== "") return value;
+    }
+    return "";
+  }
+
+  function saveImageData(mime, bytes) {
+    const suffix = String(mime).split("/").pop().replace(/[^a-zA-Z0-9]/g, "") || "img";
+    statusText = "Saving image…";
+    imageWriter.command = ["bash", "-c", "set -e; umask 077; mkdir -p -- \"$1\"; encoded=$(mktemp); out=$(mktemp --tmpdir=\"$1\" dropshelf-XXXXXX.\"$2\"); trap 'rm -f -- \"$encoded\" \"$out\"' EXIT; printf '%s' \"$3\" > \"$encoded\"; base64 -d \"$encoded\" > \"$out\"; file -Lb --mime-type \"$out\" | grep -q '^image/'; trap - EXIT; printf '%s' \"$out\"", "dropshelf", dataDir, suffix, bytes.toBase64()];
+    imageWriter.running = true;
   }
 
   function downloadImage(url) {
@@ -165,6 +200,30 @@ Item {
       root.statusText = "Image added";
       root.persist();
     }
+  }
+
+  Process {
+    id: imageWriter
+    running: false
+    stdout: StdioCollector {
+      id: imageWriterOutput
+      waitForEnd: true
+    }
+    onExited: function(exitCode) {
+      root.finishImportedImage(exitCode, imageWriterOutput.text)
+    }
+  }
+
+  function finishImportedImage(exitCode, output) {
+    const path = String(output || "").trim();
+    if (exitCode !== 0 || path === "") {
+      statusText = "Could not save that image";
+      return;
+    }
+    const uri = "file://" + encodeURI(path);
+    entries = Model.addUrls(entries, [uri]);
+    statusText = "Image added";
+    persist();
   }
 
   PanelWindow {
