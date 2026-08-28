@@ -35,61 +35,167 @@ function localUrls(urls) {
 }
 
 function remoteImageUrl(urls, text, html, nativeUrl) {
-  const candidates = [];
-  for (let i = 0; i < (urls || []).length; i++)
-    candidates.push(String(urls[i]));
-  if (text)
-    candidates.push(String(text).trim());
-  if (html) {
-    const source = String(html);
-    const match = source.match(/<img\b[^>]*\bsrc=["']([^"']+)["']/i);
-    if (match) candidates.push(match[1]);
-    const sourceSet = source.match(/<img\b[^>]*\bsrcset=["']([^"']+)["']/i);
-    if (sourceSet) candidates.push(sourceSet[1].split(/[\s,]+/)[0]);
-  }
-  if (nativeUrl)
-    candidates.push(String(nativeUrl).trim().split(/[\r\n]/)[0]);
-
-  for (let j = 0; j < candidates.length; j++) {
-    const candidate = extractGoogleImageUrl(candidates[j]);
-    if (/^https?:\/\/[^\s]+$/i.test(candidate)) return candidate;
-  }
-  return "";
+  const candidates = remoteImageCandidates(urls, text, html, nativeUrl);
+  return candidates.length > 0 ? candidates[0] : "";
 }
 
-function extractGoogleImageUrl(value) {
-  let candidate = String(value || "").trim()
+// Ranked, deduped download candidates. When a page image sits inside a link,
+// browsers put the page URL in text/uri-list and text/plain and the actual
+// image URL only in text/html, so image-bearing sources must outrank them.
+function remoteImageCandidates(urls, text, html, nativeUrl) {
+  const tiers = { extracted: [], native: [], html: [], image: [], page: [] };
+
+  function add(value, origin) {
+    const candidate = normalizeCandidate(value);
+    if (!candidate) return;
+    if (isDataImageUri(candidate)) {
+      tiers.html.push(candidate);
+      return;
+    }
+    const extracted = extractGoogleImageUrl(candidate);
+    if (/^https?:\/\/[^\s]+$/i.test(extracted)) tiers.extracted.push(extracted);
+    const url = firstHttpUrl(candidate, origin === "text");
+    if (!url) return;
+    if (isKnownPageUrl(url)) { tiers.page.push(url); return; }
+    if (origin === "native") tiers.native.push(url);
+    else if (origin === "html") tiers.html.push(url);
+    else if (looksLikeImageUrl(url)) tiers.image.push(url);
+    else tiers.page.push(url);
+  }
+
+  for (let i = 0; i < (urls || []).length; i++)
+    add(String(urls[i]), "urls");
+  if (text)
+    add(String(text), "text");
+  if (html) {
+    const source = String(html);
+    const src = source.match(/<img\b[^>]*\bsrc=["']([^"']+)["']/i);
+    if (src) add(src[1], "html");
+    const srcset = source.match(/<img\b[^>]*\bsrcset=["']([^"']+)["']/i);
+    if (srcset) add(srcset[1].split(/[\s,]+/)[0], "html");
+  }
+  if (nativeUrl) {
+    // Formats like text/x-moz-url carry "URL\ntitle"; only the first line is a URL.
+    const lines = String(nativeUrl).split(/[\r\n]+/);
+    for (let j = 0; j < lines.length; j++) {
+      if (lines[j].trim() !== "") {
+        add(lines[j], "native");
+        break;
+      }
+    }
+  }
+
+  const ordered = tiers.extracted.concat(tiers.native, tiers.html, tiers.image, tiers.page);
+  const result = [];
+  for (let k = 0; k < ordered.length; k++)
+    if (result.indexOf(ordered[k]) === -1) result.push(ordered[k]);
+  return result;
+}
+
+function normalizeCandidate(value) {
+  return String(value || "").trim()
     .replace(/&amp;/g, "&")
     .replace(/\\u003d/g, "=")
     .replace(/\\u0026/g, "&")
     .replace(/\\u002f/gi, "/");
+}
+
+function firstHttpUrl(value, trimPunctuation) {
+  const match = String(value || "").match(/https?:\/\/[^\s\r\n"'<>]+/i);
+  if (!match) return "";
+  // Free-text candidates often carry sentence punctuation; real URLs may not.
+  return trimPunctuation ? match[0].replace(/[),.;]+$/, "") : match[0];
+}
+
+function isDataImageUri(value) {
+  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(String(value || ""));
+}
+
+function parseDataUri(value) {
+  const match = String(value || "").match(/^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i);
+  if (!match) return null;
+  const payload = match[2]
+    .replace(/%2B/gi, "+")
+    .replace(/%2F/gi, "/")
+    .replace(/%3D/gi, "=")
+    .replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(payload)) return null;
+  return { mime: match[1].toLowerCase(), base64: payload };
+}
+
+function hostOf(url) {
+  const match = String(url || "").match(/^https?:\/\/([^\/?#]+)/i);
+  return match ? match[1].toLowerCase().replace(/:\d+$/, "") : "";
+}
+
+function looksLikeImageUrl(url) {
+  const path = String(url || "").split(/[?#]/)[0];
+  if (/\.(avif|bmp|gif|heic|heif|jpe?g|png|svg|webp)$/i.test(path)) return true;
+  const host = hostOf(url);
+  return /^(media\d*|i|img|images|cdn)\./i.test(host)
+    || /\.gstatic\.com$/i.test(host)
+    || host === "i.pinimg.com";
+}
+
+// Result/redirect pages that never serve image bytes directly; keep them as
+// last-resort candidates regardless of which MIME format supplied them.
+function isKnownPageUrl(url) {
+  const host = hostOf(url);
+  const rest = String(url || "").replace(/^https?:\/\/[^\/?#]+/i, "");
+  if (/(^|\.)google\./i.test(host) && /^\/(imgres|search|url)([\/?#]|$)/i.test(rest)) return true;
+  if (/(^|\.)giphy\.com$/i.test(host) && /^\/gifs([\/?#]|$)/i.test(rest)) return true;
+  return false;
+}
+
+function refererFor(url) {
+  const match = String(url || "").match(/^(https?:\/\/[^\/?#]+)/i);
+  return match ? match[1] + "/" : "";
+}
+
+// Returns the decoded imgurl|mediaurl parameter value, or "" when absent.
+function extractGoogleImageUrl(value) {
+  const candidate = normalizeCandidate(value);
   if (!candidate) return "";
-
-  const googleParam = candidate.match(/(?:imgurl|mediaurl)(?:=|%3D)(https?(?:%25?3A|:)(?:%25?2F|\/){2}[^&\s"']+)/i);
-  if (googleParam) {
-    try { return decodeURIComponent(decodeURIComponent(googleParam[1])); }
-    catch (error) { return googleParam[1]; }
+  const match = candidate.match(/(?:imgurl|mediaurl)(?:=|%3D)(https?(?:%253A|%3A|:)(?:%252F|%2F|\/){2}[^&\s"']+)/i);
+  if (!match) return "";
+  let decoded = match[1];
+  try {
+    decoded = decodeURIComponent(decoded);
+  } catch (error) {
+    return match[1];
   }
+  // Google encodes the parameter once; only doubly-encoded values need a
+  // second pass, and decoding a single-encoded URL twice corrupts %25 escapes.
+  if (!/^https?:\/\//i.test(decoded)) {
+    try {
+      const again = decodeURIComponent(decoded);
+      if (/^https?:\/\//i.test(again)) decoded = again;
+    } catch (error) { }
+  }
+  return decoded;
+}
 
-  const prefixed = candidate.match(/https?:\/\/[^\s\r\n"']+/i);
-  if (prefixed) candidate = prefixed[0].replace(/[),.;]+$/, "");
-
-  const lines = candidate.split(/[\r\n]+/);
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (/^https?:\/\//i.test(line)) {
-      candidate = line;
-      break;
+// Qt's JS engine has no ArrayBuffer/Uint8Array toBase64.
+function base64FromArrayBuffer(buffer) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const bytes = new Uint8Array(buffer);
+  const parts = [];
+  let chunk = "";
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i];
+    const b1 = i + 1 < bytes.length ? bytes[i + 1] : 0;
+    const b2 = i + 2 < bytes.length ? bytes[i + 2] : 0;
+    chunk += alphabet[b0 >> 2];
+    chunk += alphabet[((b0 & 3) << 4) | (b1 >> 4)];
+    chunk += i + 1 < bytes.length ? alphabet[((b1 & 15) << 2) | (b2 >> 6)] : "=";
+    chunk += i + 2 < bytes.length ? alphabet[b2 & 63] : "=";
+    if (chunk.length >= 8192) {
+      parts.push(chunk);
+      chunk = "";
     }
   }
-
-  try {
-    let decoded = candidate;
-    for (let i = 0; i < 2; i++) decoded = decodeURIComponent(decoded);
-    const match = decoded.match(/[?&](?:imgurl|mediaurl)=([^&]+)/i);
-    if (match) return decodeURIComponent(match[1]);
-  } catch (error) { }
-  return candidate;
+  parts.push(chunk);
+  return parts.join("");
 }
 
 function addUrls(entries, urls) {

@@ -60,7 +60,7 @@ BarWidget {
     anchors.fill: parent
     bar: root.bar
     text: "󰉋"
-    tooltipText: "Dropshelf"
+    tooltipText: "Drop Shelf"
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.LeftButton)
         root.toggleShelf();

@@ -27,6 +27,53 @@ assert(context.remoteImageUrl([], "https://www.google.com/url?mediaurl=https%253
 assert(context.remoteImageUrl([], "https://www.google.com/imgres?imgurl=https%3A%2F%2Fexample.test%2Fphoto.webp&amp;imgrefurl=x", "") === "https://example.test/photo.webp", "remoteImageUrl handles HTML-escaped Google result URLs");
 assert(context.remoteImageUrl([], "Image\nimgurl=https%253A%252F%252Fexample.test%252Fnested.jpg&other=1", "") === "https://example.test/nested.jpg", "remoteImageUrl handles embedded Google parameters");
 assert(context.remoteImageUrl([], "not a URL", "") === "", "remoteImageUrl rejects arbitrary text");
+
+const giphyGrid = context.remoteImageCandidates(
+  ["https://giphy.com/gifs/rihanna-makeout-bGPTxLislwm3u"],
+  "https://giphy.com/gifs/rihanna-makeout-bGPTxLislwm3u",
+  '<img class="giphy-gif-img" src="https://media0.giphy.com/media/bGPTxLislwm3u/giphy.gif">',
+  "");
+assert(giphyGrid[0] === "https://media0.giphy.com/media/bGPTxLislwm3u/giphy.gif", "giphy grid ranks the HTML image over the page URL");
+assert(giphyGrid[giphyGrid.length - 1] === "https://giphy.com/gifs/rihanna-makeout-bGPTxLislwm3u", "giphy page URL stays as last resort");
+assert(giphyGrid.length === 2, "candidates are deduplicated");
+
+const googleGrid = context.remoteImageCandidates(
+  ["https://www.google.com/search?q=cats&udm=2"],
+  "",
+  '<img src="data:image/jpeg;base64,/9j/4AAQSkZJRg==" alt="cat">',
+  "");
+assert(googleGrid[0] === "data:image/jpeg;base64,/9j/4AAQSkZJRg==", "google grid ranks the data URI over the search page");
+
+const googleExpanded = context.remoteImageCandidates(
+  ["https://www.google.com/imgres?imgurl=https%3A%2F%2Fexample.test%2Fphoto%2520name.jpg&imgrefurl=https%3A%2F%2Fexample.test%2Fpage"],
+  "", "", "");
+assert(googleExpanded[0] === "https://example.test/photo%20name.jpg", "single-encoded imgurl is decoded exactly once");
+
+const promiseWithPage = context.remoteImageCandidates(
+  [], "", "", "https://www.google.com/imgres?imgurl=https%3A%2F%2Fexample.test%2Ffull.jpg&imgrefurl=x\nTitle");
+assert(promiseWithPage[0] === "https://example.test/full.jpg", "extraction outranks a native page URL");
+
+const parsedData = context.parseDataUri("data:image/png;base64,iVBORw0KGgo=");
+assert(parsedData && parsedData.mime === "image/png" && parsedData.base64 === "iVBORw0KGgo=", "parseDataUri parses base64 image URIs");
+assert(context.parseDataUri("data:text/html;base64,PGI+") === null, "parseDataUri rejects non-images");
+assert(context.parseDataUri("data:image/png,rawpixels") === null, "parseDataUri rejects non-base64 payloads");
+
+assert(context.refererFor("https://media0.giphy.com/media/x/g.gif") === "https://media0.giphy.com/", "refererFor derives the URL origin");
+assert(context.looksLikeImageUrl("https://example.test/pic.JPG?w=200"), "looksLikeImageUrl accepts image extensions with queries");
+assert(context.looksLikeImageUrl("https://encrypted-tbn0.gstatic.com/images?q=tbn:abc"), "looksLikeImageUrl accepts gstatic thumbnails");
+assert(!context.looksLikeImageUrl("https://example.test/articles/cats"), "looksLikeImageUrl rejects plain page URLs");
+
+function bufferOf(text) {
+  const bytes = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i);
+  return bytes.buffer;
+}
+assert(context.base64FromArrayBuffer(bufferOf("Man")) === "TWFu", "base64FromArrayBuffer encodes full triples");
+assert(context.base64FromArrayBuffer(bufferOf("Ma")) === "TWE=", "base64FromArrayBuffer pads two-byte tails");
+assert(context.base64FromArrayBuffer(bufferOf("M")) === "TQ==", "base64FromArrayBuffer pads one-byte tails");
+assert(context.base64FromArrayBuffer(new ArrayBuffer(0)) === "", "base64FromArrayBuffer handles empty buffers");
+const longBuffer = bufferOf("light work.".repeat(1000));
+assert(context.base64FromArrayBuffer(longBuffer) === Buffer.from("light work.".repeat(1000)).toString("base64"), "base64FromArrayBuffer matches Node across chunk boundaries");
 assert(context.isImage("photo.WEBP"), "isImage recognizes supported extensions");
 assert(!context.isImage("notes.txt"), "isImage rejects non-images");
 assert(JSON.parse(context.serialize(added)).version === 1, "serialize emits versioned state");

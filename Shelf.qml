@@ -22,6 +22,12 @@ Item {
   property int barWidth: 0
   property int barHeight: 0
   property string barPosition: "top"
+  property var pendingCandidates: []
+  property int candidateAttempts: 0
+  readonly property int maxCandidateAttempts: 4
+  property var lastRemovedEntry: null
+  property string activeDragUri: ""
+  property bool selfDrop: false
 
   readonly property string pluginId: "io.github.mranallo.dropshelf"
   readonly property string stateDir: {
@@ -81,6 +87,8 @@ Item {
   function addDrop(drop) {
     const urls = Model.localUrls(drop.urls || []);
     if (urls.length > 0) {
+      if (activeDragUri !== "" && urls.indexOf(activeDragUri) !== -1)
+        selfDrop = true;
       const next = Model.addUrls(entries, urls);
       const added = next.length - entries.length;
       entries = next;
@@ -89,9 +97,8 @@ Item {
       return;
     }
 
-    const imageFormat = imageMimeFormat(drop.formats || []);
-    if (imageFormat !== "") {
-      saveImageData(imageFormat, drop.getDataAsArrayBuffer(imageFormat));
+    if (downloader.running || imageWriter.running) {
+      statusText = "Please wait for the current image";
       return;
     }
 
@@ -101,12 +108,41 @@ Item {
       "text/x-moz-url",
       "DownloadURL"
     ]) || anyTextMime(drop);
-    const remote = Model.remoteImageUrl(drop.urls || [], drop.hasText ? drop.text : "", drop.hasHtml ? drop.html : "", nativeUrl);
-    if (remote !== "") {
-      downloadImage(remote);
+    pendingCandidates = Model.remoteImageCandidates(drop.urls || [], drop.hasText ? drop.text : "", drop.hasHtml ? drop.html : "", nativeUrl);
+    candidateAttempts = 0;
+
+    const imageFormat = imageMimeFormat(drop.formats || []);
+    if (imageFormat !== "") {
+      importBase64Image(imageFormat, Model.base64FromArrayBuffer(drop.getDataAsArrayBuffer(imageFormat)));
+      return;
+    }
+    if (pendingCandidates.length > 0) {
+      tryNextCandidate();
       return;
     }
     statusText = "Drop a local file or browser image";
+  }
+
+  function tryNextCandidate() {
+    if (candidateAttempts >= maxCandidateAttempts || pendingCandidates.length === 0) {
+      pendingCandidates = [];
+      statusText = "Could not save that image";
+      return;
+    }
+    const next = String(pendingCandidates.shift());
+    candidateAttempts++;
+    console.log("[dropshelf] import attempt " + candidateAttempts + ": " + next.substring(0, 120));
+    const data = Model.parseDataUri(next);
+    if (data !== null) {
+      importBase64Image(data.mime, data.base64);
+      return;
+    }
+    startDownload(next);
+  }
+
+  function importFinished() {
+    pendingCandidates = [];
+    candidateAttempts = 0;
   }
 
   function imageMimeFormat(formats) {
@@ -137,22 +173,21 @@ Item {
     return "";
   }
 
-  function saveImageData(mime, bytes) {
+  function importBase64Image(mime, base64) {
     const suffix = String(mime).split("/").pop().replace(/[^a-zA-Z0-9]/g, "") || "img";
     statusText = "Saving image…";
-    imageWriter.command = ["bash", "-c", "set -e; umask 077; mkdir -p -- \"$1\"; encoded=$(mktemp); out=$(mktemp --tmpdir=\"$1\" dropshelf-XXXXXX.\"$2\"); trap 'rm -f -- \"$encoded\" \"$out\"' EXIT; printf '%s' \"$3\" > \"$encoded\"; base64 -d \"$encoded\" > \"$out\"; file -Lb --mime-type \"$out\" | grep -q '^image/'; trap - EXIT; printf '%s' \"$out\"", "dropshelf", dataDir, suffix, bytes.toBase64()];
+    imageWriter.command = ["bash", "-c", "set -e; umask 077; mkdir -p -- \"$1\"; out=$(mktemp --tmpdir=\"$1\" dropshelf-XXXXXX.\"$2\"); trap 'rm -f -- \"$out\"' EXIT; base64 -d > \"$out\"; file -Lb --mime-type \"$out\" | grep -q '^image/'; trap - EXIT; printf '%s' \"$out\"", "dropshelf", dataDir, suffix];
+    imageWriter.stdinEnabled = true;
     imageWriter.running = true;
+    imageWriter.write(base64);
+    imageWriter.stdinEnabled = false;
   }
 
-  function downloadImage(url) {
-    if (downloader.running) {
-      statusText = "Please wait for the current image";
-      return;
-    }
-    statusText = "Saving image…";
+  function startDownload(url) {
+    statusText = candidateAttempts > 1 ? "Saving image… (trying another source)" : "Saving image…";
     downloader.command = ["bash", "-c",
-      "set -e; umask 077; mkdir -p -- \"$1\"; out=$(mktemp --tmpdir=\"$1\" dropshelf-XXXXXX); trap 'rm -f -- \"$out\"' EXIT; curl -fL --max-time 30 --max-filesize 52428800 --proto '=http,https' -A 'Mozilla/5.0' -e 'https://www.google.com/' -o \"$out\" -- \"$2\"; mime=$(file -Lb --mime-type \"$out\"); case \"$mime\" in image/*) ;; *) exit 65 ;; esac; ext=$(printf '%s' \"${mime#image/}\" | tr -cd 'a-zA-Z0-9'); final=\"${out}.${ext:-img}\"; mv -- \"$out\" \"$final\"; trap - EXIT; printf '%s' \"$final\"",
-      "dropshelf", dataDir, url];
+      "set -e; umask 077; mkdir -p -- \"$1\"; out=$(mktemp --tmpdir=\"$1\" dropshelf-XXXXXX); trap 'rm -f -- \"$out\"' EXIT; curl -fL --max-time 30 --max-filesize 52428800 --proto '=http,https' -A 'Mozilla/5.0' -e \"$3\" -o \"$out\" -- \"$2\"; mime=$(file -Lb --mime-type \"$out\"); case \"$mime\" in image/*) ;; *) exit 65 ;; esac; ext=$(printf '%s' \"${mime#image/}\" | tr -cd 'a-zA-Z0-9'); final=\"${out}.${ext:-img}\"; mv -- \"$out\" \"$final\"; trap - EXIT; printf '%s' \"$final\"",
+      "dropshelf", dataDir, url, Model.refererFor(url)];
     downloader.running = true;
   }
 
@@ -165,6 +200,28 @@ Item {
   function removeUri(uri) {
     entries = Model.removeUri(entries, uri);
     statusText = entries.length === 0 ? "Drop files here" : entries.length + (entries.length === 1 ? " item" : " items");
+    persist();
+  }
+
+  // The drop action reported for native drags is unreliable (Electron and
+  // browser targets mirror page JS, not actual success), so every drag-out
+  // removes the tile and Undo covers the failed-drop case.
+  function removeAfterDrag(uri) {
+    const matches = entries.filter(function(item) { return item.uri === uri; });
+    if (matches.length === 0)
+      return;
+    lastRemovedEntry = matches[0];
+    entries = Model.removeUri(entries, uri);
+    statusText = "Dragged out — Undo to restore";
+    persist();
+  }
+
+  function undoRemove() {
+    if (!lastRemovedEntry)
+      return;
+    entries = Model.addUrls(entries, [lastRemovedEntry.uri]);
+    lastRemovedEntry = null;
+    statusText = entries.length + (entries.length === 1 ? " item" : " items");
     persist();
   }
 
@@ -209,9 +266,11 @@ Item {
     onExited: function(exitCode) {
       const path = String(downloadOutput.text || "").trim();
       if (exitCode !== 0 || path === "") {
-        root.statusText = "Could not save that image";
+        console.log("[dropshelf] download failed with exit " + exitCode);
+        root.tryNextCandidate();
         return;
       }
+      root.importFinished();
       const uri = "file://" + encodeURI(path);
       const next = Model.addUrls(root.entries, [uri]);
       root.entries = next;
@@ -235,9 +294,11 @@ Item {
   function finishImportedImage(exitCode, output) {
     const path = String(output || "").trim();
     if (exitCode !== 0 || path === "") {
-      statusText = "Could not save that image";
+      console.log("[dropshelf] image import failed with exit " + exitCode);
+      tryNextCandidate();
       return;
     }
+    importFinished();
     const uri = "file://" + encodeURI(path);
     entries = Model.addUrls(entries, [uri]);
     statusText = "Image added";
@@ -248,8 +309,9 @@ Item {
     id: shelfWindow
 
     color: Color.background
-    implicitWidth: 420
-    implicitHeight: 560
+    // Compact 2x2 tile grid: two cells wide plus chrome, two rows tall.
+    implicitWidth: Style.space(280)
+    implicitHeight: Style.space(392)
     visible: false
     screen: {
       for (let i = 0; i < Quickshell.screens.length; i++)
@@ -316,18 +378,18 @@ Item {
 
             Item {
               width: parent.width
-              implicitHeight: Math.max(titleColumn.implicitHeight, clearButton.implicitHeight)
+              implicitHeight: Math.max(titleColumn.implicitHeight, headerButtons.implicitHeight)
 
               Column {
                 id: titleColumn
                 anchors.left: parent.left
-                anchors.right: clearButton.left
+                anchors.right: headerButtons.left
                 anchors.rightMargin: Style.space(12)
                 spacing: Style.space(2)
 
                 Text {
                   width: parent.width
-                  text: "Dropshelf"
+                  text: "Drop Shelf"
                   textFormat: Text.PlainText
                   font.family: Style.font.family
                   font.pixelSize: Style.font.title
@@ -347,19 +409,37 @@ Item {
                 }
               }
 
-              Button {
-                id: clearButton
+              Row {
+                id: headerButtons
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                visible: root.entries.length > 0
-                text: "Clear"
-                fontSize: Style.font.bodySmall
-                foreground: Color.foreground
-                fontFamily: Style.font.family
-                horizontalPadding: Style.spacing.controlPaddingX
-                verticalPadding: Style.spacing.controlPaddingY
-                bordered: true
-                onClicked: root.clearShelf()
+                spacing: Style.space(8)
+
+                Button {
+                  id: undoButton
+                  visible: root.lastRemovedEntry !== null
+                  text: "Undo"
+                  fontSize: Style.font.bodySmall
+                  foreground: Color.foreground
+                  fontFamily: Style.font.family
+                  horizontalPadding: Style.spacing.controlPaddingX
+                  verticalPadding: Style.spacing.controlPaddingY
+                  bordered: true
+                  onClicked: root.undoRemove()
+                }
+
+                Button {
+                  id: clearButton
+                  visible: root.entries.length > 0
+                  text: "Clear"
+                  fontSize: Style.font.bodySmall
+                  foreground: Color.foreground
+                  fontFamily: Style.font.family
+                  horizontalPadding: Style.spacing.controlPaddingX
+                  verticalPadding: Style.spacing.controlPaddingY
+                  bordered: true
+                  onClicked: root.clearShelf()
+                }
               }
             }
 
@@ -432,6 +512,8 @@ Item {
                 readonly property string uri: String(modelData.uri || "")
                 readonly property string name: String(modelData.name || "File")
                 readonly property bool imageFile: Model.isImage(name)
+                // Holds the grab result so its image:// URL stays valid for the drag.
+                property var grabResult: null
 
                 Rectangle {
                   id: tileSurface
@@ -510,6 +592,13 @@ Item {
                   }
                 }
 
+                // Canonical external-drag pattern: Drag.active follows the
+                // MouseArea's threshold-based drag state, and the native drag
+                // ends on its own. Calling Drag.drop()/Drag.cancel() on an
+                // Automatic drag resets its state mid-flight (the native drag
+                // steals the grab, firing onCanceled), which loses the real
+                // drop action.
+                Drag.active: tileMouse.drag.active
                 Drag.mimeData: ({ "text/uri-list": tile.uri + "\r\n" })
                 Drag.supportedActions: Qt.CopyAction
                 Drag.proposedAction: Qt.CopyAction
@@ -517,9 +606,19 @@ Item {
                 Drag.imageSource: tile.imageFile ? tile.uri : ""
                 Drag.hotSpot.x: width / 2
                 Drag.hotSpot.y: height / 2
+                Drag.onDragStarted: {
+                  root.activeDragUri = tile.uri;
+                  root.selfDrop = false;
+                }
                 Drag.onDragFinished: function(dropAction) {
-                  if (dropAction !== Qt.IgnoreAction)
-                    root.removeUri(tile.uri);
+                  tile.x = 0;
+                  tile.y = 0;
+                  console.log("[dropshelf] outgoing drag finished with action " + dropAction);
+                  const droppedOnShelf = root.selfDrop && root.activeDragUri === tile.uri;
+                  root.activeDragUri = "";
+                  root.selfDrop = false;
+                  if (!droppedOnShelf)
+                    root.removeAfterDrag(tile.uri);
                 }
 
                 MouseArea {
@@ -530,18 +629,14 @@ Item {
                   cursorShape: Qt.OpenHandCursor
                   drag.target: tile
                   preventStealing: true
-                  onPressed: tile.Drag.active = true
-                  onReleased: {
-                    tile.Drag.drop();
-                    tile.Drag.active = false;
-                    tile.x = 0;
-                    tile.y = 0;
-                  }
-                  onCanceled: {
-                    tile.Drag.cancel();
-                    tile.Drag.active = false;
-                    tile.x = 0;
-                    tile.y = 0;
+                  onPressed: {
+                    // Non-image files have no source image to show while
+                    // dragging; snapshot the tile before the drag starts.
+                    if (!tile.imageFile)
+                      tileSurface.grabToImage(function(result) {
+                        tile.grabResult = result;
+                        tile.Drag.imageSource = result.url;
+                      });
                   }
                 }
               }
