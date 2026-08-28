@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
@@ -13,6 +14,14 @@ Item {
   property bool closingFromHost: false
   property var entries: []
   property string statusText: "Drop files here"
+  property string anchorScreen: ""
+  property int anchorX: 0
+  property int anchorY: 0
+  property int anchorWidth: 0
+  property int anchorHeight: 0
+  property int barWidth: 0
+  property int barHeight: 0
+  property string barPosition: "top"
 
   readonly property string pluginId: "io.github.mranallo.dropshelf"
   readonly property string stateDir: {
@@ -28,6 +37,19 @@ Item {
 
   function open(payloadJson) {
     closingFromHost = false;
+    if (payloadJson) {
+      try {
+        const payload = JSON.parse(String(payloadJson));
+        anchorScreen = String(payload.screen || "");
+        anchorX = Number(payload.x) || 0;
+        anchorY = Number(payload.y) || 0;
+        anchorWidth = Number(payload.width) || 0;
+        anchorHeight = Number(payload.height) || 0;
+        barWidth = Number(payload.barWidth) || 0;
+        barHeight = Number(payload.barHeight) || 0;
+        barPosition = String(payload.barPosition || "top");
+      } catch (error) { }
+    }
     shelfWindow.visible = true;
   }
 
@@ -99,15 +121,41 @@ Item {
     }
   }
 
-  FloatingWindow {
+  PanelWindow {
     id: shelfWindow
 
-    title: "Dropshelf"
     color: Color.background
     implicitWidth: 420
     implicitHeight: 560
-    minimumSize: Qt.size(320, 300)
     visible: false
+    screen: {
+      for (let i = 0; i < Quickshell.screens.length; i++)
+        if (String(Quickshell.screens[i].name || "") === root.anchorScreen)
+          return Quickshell.screens[i];
+      return Quickshell.screens.length > 0 ? Quickshell.screens[0] : null;
+    }
+    WlrLayershell.namespace: "omarchy-dropshelf"
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    exclusiveZone: 0
+
+    anchors {
+      top: root.barPosition !== "bottom"
+      bottom: root.barPosition === "bottom"
+      left: root.barPosition !== "right"
+      right: root.barPosition === "right"
+    }
+
+    margins {
+      top: root.barPosition === "top" ? 0 : Math.max(Style.gapsOut, root.anchorY + root.anchorHeight / 2 - shelfWindow.height / 2)
+      bottom: 0
+      left: {
+        if (root.barPosition === "left") return 0;
+        if (root.barPosition === "right") return 0;
+        return Math.max(Style.gapsOut, Math.min(root.anchorX + root.anchorWidth / 2 - shelfWindow.width / 2, shelfWindow.screen.width - shelfWindow.width - Style.gapsOut));
+      }
+      right: 0
+    }
 
     onVisibleChanged: {
       if (!visible && !root.closingFromHost && root.shell && typeof root.shell.hide === "function")

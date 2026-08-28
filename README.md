@@ -10,13 +10,7 @@ Dropshelf stores file URI references only. It never moves, copies, or deletes th
 omarchy plugin add https://github.com/mranallo/omarchy-dropshelf.git --enable
 ```
 
-The Dropshelf icon is added to the right side of the Omarchy bar. Click it to open the floating shelf.
-
-For a centered floating window, add this rule to `~/.config/hypr/hyprland.lua`:
-
-```lua
-o.window({ class = "^org.quickshell$", title = "^Dropshelf$" }, { float = true, center = true, size = { 420, 560 } })
-```
+The Dropshelf icon is added to the right side of the Omarchy bar. Click it to open the shelf beneath the icon. The shelf follows the icon when it is moved between the left, center, or right bar sections.
 
 ## Use
 
