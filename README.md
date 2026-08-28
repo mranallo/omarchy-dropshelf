@@ -23,6 +23,16 @@ The Drop Shelf icon is added to the right side of the Omarchy bar. Click it to o
 
 Removing an item never touches the original file.
 
+## Keyboard shortcut (optional)
+
+The shelf can be toggled from the command line, so you can bind it to a key. In `~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + D", "Drop Shelf", "omarchy shell shell toggle io.github.mranallo.dropshelf '{}'")
+```
+
+When opened this way the shelf anchors near the top-left of the screen instead of under the bar icon.
+
 ## Configuration
 
 Drop Shelf needs no configuration. Its data lives at:
