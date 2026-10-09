@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import qs.Commons
 import qs.Ui
 
@@ -14,9 +15,8 @@ BarWidget {
   implicitHeight: button.implicitHeight
 
   function payload() {
-    var anchorWindow = root.bar && typeof root.bar.targetWindow === "function"
-      ? root.bar.targetWindow(button)
-      : null;
+    // Third-party bar APIs do not expose the host's targetWindow() helper.
+    var anchorWindow = button.QsWindow.window;
     if (!anchorWindow || !anchorWindow.screen)
       return "{}";
     var point = anchorWindow.contentItem.mapFromItem(button, 0, 0);
@@ -35,11 +35,11 @@ BarWidget {
   function open() {
     if (!root.bar || !root.bar.shell) return;
     var data = root.payload();
-    if (data === "{}") {
-      if (root.openAttempts++ < 3)
-        Qt.callLater(root.open);
+    if (data === "{}" && root.openAttempts++ < 3) {
+      Qt.callLater(root.open);
       return;
     }
+    // If geometry is still unavailable, open at the shelf's remembered anchor.
     root.openAttempts = 0;
     root.bar.shell.summon("io.github.mranallo.dropshelf", data);
   }
